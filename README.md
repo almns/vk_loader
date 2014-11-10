@@ -7,7 +7,7 @@ api = VkAPI()
 user_ids = api.get_group_users(44016343)
 
 # get user profiles
-user_profiles = api.get_group_users(user_ids)
+user_profiles = api.get_user_profiles(user_ids)
 user_profile = user_profiles[5]
 print user_profiles[0]['last_name'], user_profiles[0]['universities']
 
