@@ -1,3 +1,4 @@
+```
 from vkapi import VkAPI
 
 api = VkAPI()
@@ -15,3 +16,4 @@ friends = api.get_friends(1)
 
 # get profile for id1
 durov_profile = api.get_user_profile(1)
+```
