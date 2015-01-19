@@ -1,3 +1,6 @@
+ #!/usr/bin/python
+# -*- coding: utf-8 -*-
+
 import time
 import logging
 import requests
@@ -5,6 +8,7 @@ import codecs
 import os
 import sys
 import json
+import argparse
 
 logger = logging.getLogger(__name__)
 
@@ -12,8 +16,8 @@ class VkError(Exception):
     pass
 
 
-PROFILE_FIELDS = ','.join(['nickname', 'screen_name', 'sex', 'bdate', 'city', 'relation', 'country', 'education', 'counters', 'home_town',
-                               'universities', 'schools', 'connections', 'relation', 'relatives', 'interests', 'books', 'last_seen', 'occupation'])    
+PROFILE_FIELDS = ['nickname', 'screen_name', 'sex', 'bdate', 'city', 'relation', 'country', 'education', 'counters', 'home_town',
+                               'universities', 'schools', 'connections', 'relation', 'relatives', 'interests', 'books', 'last_seen', 'occupation']    
     
 class VkAPI(object):    
          
@@ -60,7 +64,7 @@ class VkAPI(object):
         self.requests_times.append(time.time())
         
     def get_user_profile(self, user_id, fields=PROFILE_FIELDS):    
-        profile = self._do_api_call('users.get', { 'user_ids' :  user_id,  'fields' : fields})                    
+        profile = self._do_api_call('users.get', { 'user_ids' :  user_id,  'fields' : ','.join(fields)})                    
         return profile[0]           
                             
     def get_user_profiles(self, user_ids, fields=PROFILE_FIELDS):                      
@@ -68,7 +72,7 @@ class VkAPI(object):
         for offset in xrange(0, len(user_ids) / 100 + 1):            
             start, end = offset * 100, (offset + 1) * 100 
             ids = ','.join([str(user_id) for user_id in user_ids[start:end]])        
-            response = self._do_api_call('users.get', { 'user_ids' :  ids,  'fields' : fields})
+            response = self._do_api_call('users.get', { 'user_ids' :  ids,  'fields' : ','.join(fields)})
             result.extend(response)
         return result
     
@@ -81,7 +85,7 @@ class VkAPI(object):
         return list(user_ids)
     
     def get_friends(self, user_id, fields=PROFILE_FIELDS):
-        response = self._do_api_call('friends.get', { 'user_id' : user_id,   'fields' : fields})                    
+        response = self._do_api_call('friends.get', { 'user_id' : user_id,   'fields' : ','.join(fields)})                    
         return response['items']
                     
     def close():
@@ -100,20 +104,18 @@ class VkAPI(object):
             try:
                 friends = self.get_friends(head_id, fields=[])    
             except VkError as e:
-                pass
-            
-            all_profiles[head_id]['friends'] = [int(friend['id']) for friend in friends] 
+                pass            
+            all_profiles[head_id]['friends'] = friends
             
             if head_depth > 1:            
-                for friend in friends:
-                    friend_id = int(friend['id'])
+                for friend_id in friends:                    
                     if friend_id not in all_profiles:
-                        all_profiles[friend_id] = friend
+                        all_profiles[friend_id] = {'id' : friend_id }
                         queue.append((friend_id, head_depth - 1))
             queue.pop(0) 
         return all_profiles 
        
-def save_friends_pairs_file(file, user_network):   
+def save_friends_pairs(file, user_network):   
     with open(file, 'w') as of:
         pairs = set()
         for k, v in user_network.iteritems():
@@ -127,19 +129,65 @@ def save_friends_pairs_file(file, user_network):
                         of.write('%d %d\n' % (fr, k))
                         pairs.add((fr, k))   
                     
-def save_profiles_file(file, user_network):   
+def save_profiles_json(file, user_network):   
     with codecs.open(file, 'w', 'utf-8') as of:
         of.write(json.dumps(user_network, ensure_ascii=False, encoding='utf-8', indent=1)) 
-                
+        
+def save_profiles_csv(file, user_network): 
+    import csv
     
+    def by_path(json, path):
+        splited = path.split(u'.')
+        for p in splited:
+            try:
+                p_id = int(p)
+                json = json[p_id]
+            except:
+                if p in json:
+                    json = json[p]
+                else:
+                    return u''
+        return unicode(json)
+    
+    fields = ['id', 'nickname', 'first_name', 'last_name', 'bdate', 'screen_name', 'sex', 
+              'city.id', 'city.title', 
+              'home_town',
+              'country.id', 'country.title', 
+              'universities.0.id', 'universities.0.name', 'universities.0.city', 'universities.0.graduation', 
+              'occupation.type', 'occupation.id', 'occupation.name', 
+              'schools.0.id', 'schools.0.name', 'schools.0.city', 'schools.0.year_graduated', 
+              ]
+              
+    with open(file, 'wb') as of:           
+        profiles_writer = csv.DictWriter(of, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, fieldnames=fields)
+        profiles_writer.writeheader()
+        for user_profile in user_network:
+            profiles_writer.writerow({ field : by_path(user_profile, field).encode('utf-8') for field in fields})                     
+
+            
 if __name__ == '__main__':
     logger.setLevel(logging.INFO)
     logger.addHandler(logging.StreamHandler())
-       
-    api = VkAPI()    
+             
+    parser = argparse.ArgumentParser(description='Load VK egonets.')
+    parser.add_argument('user_id', metavar='user_id', type=int, nargs='+',
+                   help="user id's")
+    parser.add_argument('--csv', dest='is_csv', action='store_true',               
+                   help='use csv output for profiles')                   
+    parser.add_argument('-f', dest='files', action='append', default=[],
+                   help="file containing the list of user ids's")    
+    args = parser.parse_args()
     
-    for user_id in open(sys.argv[1], 'r') if os.path.isfile(sys.argv[1]) else sys.argv[1:]:   
-        user_id = user_id.strip()
+    user_ids = set()
+    user_ids.update(args.user_id)
+    
+    
+    user_ids.update([int(id) for fname in args.files 
+                        for ids in open(fname, 'r').read().split() 
+                                for id in ids])
+    
+    api = VkAPI() 
+    for user_id in user_ids:           
         logger.info('Getting network for id%s' % user_id)
         
         user_network = api.get_user_network(user_id, 2)   
@@ -149,6 +197,10 @@ if __name__ == '__main__':
            interested_user_ids.add(uid) # profile['friends']
         user_profiles = api.get_user_profiles(list(interested_user_ids))
                 
-        save_profiles_file('profiles_%s.json' % user_id, user_profiles)        
-        save_friends_pairs_file('egonet_%s.csv' % user_id, user_network)
+        if not args.is_csv:        
+            save_profiles_json('profiles_%s.json' % user_id, user_profiles)        
+        else:
+            save_profiles_csv('profiles_%s.csv' % user_id, user_profiles)
+        save_friends_pairs('egonet_%s.csv' % user_id, user_network)
+
         
