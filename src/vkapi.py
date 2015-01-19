@@ -170,7 +170,7 @@ if __name__ == '__main__':
     logger.addHandler(logging.StreamHandler())
              
     parser = argparse.ArgumentParser(description='Load VK egonets.')
-    parser.add_argument('user_id', metavar='user_id', type=int, nargs='+',
+    parser.add_argument('user_id', metavar='user_id', type=int, nargs='*', default=[],
                    help="user id's")
     parser.add_argument('--csv', dest='is_csv', action='store_true',               
                    help='use csv output for profiles')                   
@@ -180,12 +180,9 @@ if __name__ == '__main__':
     
     user_ids = set()
     user_ids.update(args.user_id)
-    
-    
+             
     user_ids.update([int(id) for fname in args.files 
-                        for ids in open(fname, 'r').read().split() 
-                                for id in ids])
-    
+                        for id in open(fname, 'r').read().split()])           
     api = VkAPI() 
     for user_id in user_ids:           
         logger.info('Getting network for id%s' % user_id)
