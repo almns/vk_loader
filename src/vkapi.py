@@ -176,6 +176,9 @@ if __name__ == '__main__':
                    help='use csv output for profiles')                   
     parser.add_argument('-f', dest='files', action='append', default=[],
                    help="file containing the list of user ids's")    
+    parser.add_argument('-t', dest='token', default=None,
+                   help="access token for vk api")
+                   
     args = parser.parse_args()
     
     user_ids = set()
@@ -183,7 +186,7 @@ if __name__ == '__main__':
              
     user_ids.update([int(id) for fname in args.files 
                         for id in open(fname, 'r').read().split()])           
-    api = VkAPI() 
+    api = VkAPI(args.token) 
     for user_id in user_ids:           
         logger.info('Getting network for id%s' % user_id)
         
